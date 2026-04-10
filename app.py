@@ -7,10 +7,9 @@ st.set_page_config(page_title="Bharat-Aladdin", layout="wide")
 class BharatAladdin:
     def fetch_data(self, ticker):
         symbol = f"{ticker.strip()}.NS"
-        # Download and fix the Multi-Index structure
         df = yf.download(symbol, period="1y", interval="1d", progress=False)
         
-        # This line fixes the "Identically-labeled Series" error
+        # Flatten Multi-Index columns if they exist
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
             
@@ -20,10 +19,10 @@ class BharatAladdin:
         if df.empty or len(df) < 50:
             return None, None, None, None
             
-        # Calculation using standard Pandas
+        # Technicals
         df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
         
-        # RSI Logic
+        # RSI
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -66,12 +65,13 @@ if st.button("Run Analysis"):
 
             color = "#238636" if score >= 40 else "#da3633"
             
+            # FIXED: Changed unsafe_allow_headers to unsafe_allow_html
             st.markdown(f"""
                 <div style="border-left: 10px solid {color}; padding:15px; background:#161b22; margin-bottom:10px; border-radius: 5px;">
-                    <h3 style="margin:0;">{ticker}: ₹{price:.2f}</h3>
+                    <h3 style="margin:0; color:white;">{ticker}: ₹{price:.2f}</h3>
                     <p style="margin:5px 0; font-weight:bold; color:{color};">Score: {score} | Distance to EMA: {dist:.2f}%</p>
                 </div>
-            """, unsafe_allow_headers=True)
+            """, unsafe_allow_html=True)
             
             for r in reasons:
                 st.write(r)
