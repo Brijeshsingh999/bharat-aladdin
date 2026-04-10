@@ -31,7 +31,17 @@ class BharatAladdin:
     def calculate_logic(self, df):
         if df.empty or len(df) < 50:
             return None
-            
+        # Inside calculate_logic(self, df):
+vol_avg = df['Volume'].rolling(window=20).mean().iloc[-1]
+curr_vol = df['Volume'].iloc[-1]
+volume_surge = curr_vol > (vol_avg * 1.5) # 50% spike
+
+if volume_surge and price > ema:
+    score += 30 # High conviction
+    reasons.append("🔥 SMART MONEY: Significant volume surge detected.")
+elif volume_surge and price < ema:
+    reasons.append("⚠️ DISTRIBUTION: Heavy volume on a downward trend.")
+    
         # 1. Trend Factor
         df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
         price = float(df['Close'].iloc[-1])
