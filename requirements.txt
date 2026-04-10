@@ -1,4 +1,4 @@
-streamlit
-yfinance
-pandas_ta
-pandas
+streamlit==1.42.0
+yfinance==0.2.40
+pandas-ta==0.3.14b0
+pandas==2.2.2
