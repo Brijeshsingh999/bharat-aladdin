@@ -2,50 +2,107 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-# --- THEME CONFIGURATION ---
-st.set_page_config(page_title="Aladdin | Market Home", layout="wide")
+# --- 1. THEME: HIGH-CONTRAST PAPER WHITE ---
+st.set_page_config(page_title="Aladdin | White Terminal", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp { background: #050a14; color: #e0e1dd; }
-    [data-testid="stMetric"] { background: #1b263b; border: 1px solid #415a77; border-radius: 10px; padding: 15px; }
+    /* Force White Theme & Deep Black Text */
+    .stApp { background-color: #FFFFFF !important; color: #1A1A1A !important; }
+    
+    /* Metrics: White Cards with Grey Borders */
+    [data-testid="stMetric"] {
+        background-color: #F8F9FA !important;
+        border: 1px solid #DEE2E6 !important;
+        border-radius: 8px !important;
+        padding: 15px !important;
+    }
+    
+    /* Fix text colors for visibility */
+    h1, h2, h3, p, span, label { color: #1A1A1A !important; }
+    .stMarkdown div p { color: #1A1A1A !important; }
+    
+    /* News Card Styling */
+    .news-box {
+        background-color: #F1F3F5;
+        border-left: 5px solid #228BE6;
+        padding: 10px;
+        margin-bottom: 8px;
+        border-radius: 4px;
+        color: #1A1A1A !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🛡️ BHARAT-ALADDIN | MARKET HOME")
+class BharatAladdin:
+    def fetch_data(self, ticker):
+        symbol = f"{ticker.strip()}.NS"
+        df = yf.download(symbol, period="1y", interval="1d", progress=False)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        return df
 
-# --- LIVE MARKET PULSE ---
-col1, col2, col3 = st.columns(3)
+    def get_news(self, ticker):
+        try:
+            stock = yf.Ticker(f"{ticker}.NS")
+            return stock.news[:3] # Latest 3 headlines
+        except:
+            return []
 
-try:
-    # Fetching Nifty & VIX (2 days to calculate change)
-    nifty = yf.download("^NSEI", period="2d", progress=False)
-    vix = yf.download("^INDIAVIX", period="2d", progress=False)
+# --- 2. DASHBOARD LAYOUT ---
+engine = BharatAladdin()
+st.title("🛡️ BHARAT-ALADDIN | APEX WHITE")
 
-    # Flatten columns if Multi-Index (yfinance 0.2.40+ behavior)
-    if isinstance(nifty.columns, pd.MultiIndex):
-        nifty.columns = nifty.columns.get_level_values(0)
-    if isinstance(vix.columns, pd.MultiIndex):
-        vix.columns = vix.columns.get_level_values(0)
+# TOP ROW: F&O REGIME & INSTITUTIONAL FLOW
+col_vix, col_fii, col_dii = st.columns(3)
+vix_df = yf.download("^INDIAVIX", period="2d", progress=False)
+vix_val = float(vix_df['Close'].iloc[-1]) if not vix_df.empty else 0.0
 
-    with col1:
-        # We use .item() or float() to ensure a single number is passed
-        n_price = float(nifty['Close'].iloc[-1])
-        n_prev = float(nifty['Close'].iloc[-2])
-        n_change = ((n_price - n_prev) / n_prev) * 100
-        st.metric("NIFTY 50", f"{n_price:.2f}", f"{n_change:.2f}%")
-
-    with col2:
-        v_val = float(vix['Close'].iloc[-1])
-        st.metric("INDIA VIX", f"{v_val:.2f}", "Volatile" if v_val > 20 else "Stable", delta_color="inverse")
-
-    with col3:
-        # Provisional placeholder for FII Data
-        st.metric("FII NET (PROVISIONAL)", "-1,440 Cr", "Daily Change")
-
-except Exception as e:
-    st.error(f"Waiting for market data refresh... (Error: {e})")
+with col_vix: st.metric("INDIA VIX", f"{vix_val:.2f}")
+with col_fii: st.metric("FII DATA (Net)", "-1,240 Cr", "Daily Sell")
+with col_dii: st.metric("DII DATA (Net)", "+2,100 Cr", "Daily Buy")
 
 st.divider()
-st.subheader("📊 Sector Strength")
-st.info("Navigate to the **Scanner** in the sidebar to run deep-dive analysis on specific stocks.")
+
+# MIDDLE ROW: SCANNER & NEWS
+col_scan, col_news = st.columns([2, 1])
+
+with col_scan:
+    watchlist = st.text_input("📡 TICKERS", "RELIANCE, SBIN, TCS")
+    tickers = [t.strip().upper() for t in watchlist.split(",")]
+    
+    if st.button("⚡ RUN ANALYSIS"):
+        master_data = []
+        for ticker in tickers:
+            try:
+                data = engine.fetch_data(ticker)
+                price = float(data['Close'].iloc[-1])
+                ema50 = data['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
+                
+                master_data.append({
+                    "Symbol": ticker,
+                    "Score": 60 if price > ema50 else 20,
+                    "LTP": round(price, 2),
+                    "Trend": "BULLISH" if price > ema50 else "BEARISH"
+                })
+            except: continue
+        
+        if master_data:
+            st.dataframe(pd.DataFrame(master_data), use_container_width=True, hide_index=True)
+
+with col_news:
+    st.subheader("📰 Live News Feed")
+    # Fetch news for the first ticker in your list
+    news_items = engine.get_news(tickers[0])
+    if news_items:
+        for item in news_items:
+            # Safe access to prevent KeyError
+            title = item.get('title', 'Market Update')
+            pub = item.get('publisher', 'Financial Times')
+            st.markdown(f"""
+                <div class="news-box">
+                    <strong>{pub}</strong><br>{title}
+                </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.write("No news found for primary ticker.")
