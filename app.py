@@ -7,6 +7,7 @@ st.set_page_config(page_title="Bharat-Aladdin | Apex", layout="wide")
 
 class BharatAladdin:
     def fetch_data(self, ticker, is_index=False):
+        # India VIX ticker can be tricky, we try the most common one
         symbol = ticker if is_index else f"{ticker.strip()}.NS"
         df = yf.download(symbol, period="1y", interval="1d", progress=False)
         if isinstance(df.columns, pd.MultiIndex):
@@ -15,8 +16,9 @@ class BharatAladdin:
 
     def get_market_regime(self):
         # India VIX is the barometer for F&O Regime
-        vix_df = self.fetch_data("INDIAVIX.NS", is_index=True)
-        if vix_df.empty: return "Unknown", 0
+        vix_df = self.fetch_data("^INDIAVIX", is_index=True)
+        if vix_df.empty or len(vix_df) < 1:
+            return "Unknown", 0.0
         current_vix = float(vix_df['Close'].iloc[-1])
         
         if current_vix < 15:
@@ -43,7 +45,6 @@ class BharatAladdin:
         score = 0
         reasons = []
         
-        # Scoring Weights
         if price > ema:
             score += 50
             reasons.append("Trend: Bullish (Above 50 EMA)")
@@ -52,31 +53,28 @@ class BharatAladdin:
             
         if volume_surge:
             score += 30
-            reasons.append("Smart Money: High Volume Surge detected")
+            reasons.append("Smart Money: High Volume Surge")
         
         dist_to_ema = ((price - ema) / ema) * 100
         if dist_to_ema > 10:
             score -= 20
-            reasons.append("Risk: Overextended (Mean Reversion likely)")
+            reasons.append("Risk: Overextended")
 
-        return {"score": score, "reasons": reasons, "price": price, "dist": dist_to_ema}
+        return {"score": int(score), "reasons": reasons, "price": price, "dist": dist_to_ema}
 
 # --- DASHBOARD UI ---
 engine = BharatAladdin()
-
 st.title("🛡️ Bharat-Aladdin: Apex Intelligence")
 
 # Section 1: F&O Regime
 regime, vix_val = engine.get_market_regime()
 st.info(f"**Current F&O Regime:** {regime} | **India VIX:** {vix_val:.2f}")
 
-# Section 2: Multi-Stock Watchlist
 watchlist = st.text_input("Enter Tickers", "RELIANCE, SBIN, TCS, INFOTEE, HDFCBANK, ICICIBANK")
 tickers = [t.strip().upper() for t in watchlist.split(",")]
 
 if st.button("🔥 Run Apex Analysis"):
     master_data = []
-    
     for ticker in tickers:
         try:
             data = engine.fetch_data(ticker)
@@ -86,23 +84,30 @@ if st.button("🔥 Run Apex Analysis"):
                     "Symbol": ticker,
                     "Score": result['score'],
                     "Price": round(result['price'], 2),
-                    "Gap to EMA %": round(result['dist'], 2),
+                    "Gap %": round(result['dist'], 2),
                     "Analysis": " | ".join(result['reasons'])
                 })
         except:
             continue
 
-    # Convert to DataFrame and Rank
     if master_data:
         df_display = pd.DataFrame(master_data).sort_values(by="Score", ascending=False)
-        
-        # Display as a clean Ranking Table
         st.subheader("🏆 Conviction Rankings")
         
-        def highlight_score(val):
-            color = '#238636' if val >= 70 else ('#da3633' if val <= 30 else '#8e7b11')
-            return f'background-color: {color}; color: white; font-weight: bold'
-
-        st.table(df_display.style.applymap(highlight_score, subset=['Score']))
+        # FIXED: Using st.dataframe with column configuration for better styling in new Streamlit
+        st.dataframe(
+            df_display,
+            column_config={
+                "Score": st.column_config.ProgressColumn(
+                    "Aladdin Score",
+                    help="Conviction score (0-100)",
+                    format="%d",
+                    min_value=0,
+                    max_value=100,
+                ),
+            },
+            hide_index=True,
+            use_container_width=True
+        )
     else:
-        st.error("No valid data found for the tickers provided.")
+        st.error("No valid data found.")
