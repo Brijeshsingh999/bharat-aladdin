@@ -3,11 +3,11 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
+# --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Bharat-Aladdin | Apex", layout="wide")
 
 class BharatAladdin:
     def fetch_data(self, ticker, is_index=False):
-        # India VIX ticker can be tricky, we try the most common one
         symbol = ticker if is_index else f"{ticker.strip()}.NS"
         df = yf.download(symbol, period="1y", interval="1d", progress=False)
         if isinstance(df.columns, pd.MultiIndex):
@@ -31,18 +31,8 @@ class BharatAladdin:
     def calculate_logic(self, df):
         if df.empty or len(df) < 50:
             return None
-        # Inside calculate_logic(self, df):
-vol_avg = df['Volume'].rolling(window=20).mean().iloc[-1]
-curr_vol = df['Volume'].iloc[-1]
-volume_surge = curr_vol > (vol_avg * 1.5) # 50% spike
-
-if volume_surge and price > ema:
-    score += 30 # High conviction
-    reasons.append("🔥 SMART MONEY: Significant volume surge detected.")
-elif volume_surge and price < ema:
-    reasons.append("⚠️ DISTRIBUTION: Heavy volume on a downward trend.")
-    
-        # 1. Trend Factor
+            
+        # 1. Trend Factor (Indentation fixed here)
         df['EMA50'] = df['Close'].ewm(span=50, adjust=False).mean()
         price = float(df['Close'].iloc[-1])
         ema = float(df['EMA50'].iloc[-1])
@@ -72,15 +62,16 @@ elif volume_surge and price < ema:
 
         return {"score": int(score), "reasons": reasons, "price": price, "dist": dist_to_ema}
 
-# --- DASHBOARD UI ---
+# --- 2. USER INTERFACE ---
 engine = BharatAladdin()
 st.title("🛡️ Bharat-Aladdin: Apex Intelligence")
 
-# Section 1: F&O Regime
+# Section: F&O Regime Status
 regime, vix_val = engine.get_market_regime()
 st.info(f"**Current F&O Regime:** {regime} | **India VIX:** {vix_val:.2f}")
 
-watchlist = st.text_input("Enter Tickers", "RELIANCE, SBIN, TCS, INFOTEE, HDFCBANK, ICICIBANK")
+# Section: Watchlist Input
+watchlist = st.text_input("Enter Tickers (comma separated)", "RELIANCE, SBIN, TCS, HDFCBANK, ICICIBANK")
 tickers = [t.strip().upper() for t in watchlist.split(",")]
 
 if st.button("🔥 Run Apex Analysis"):
@@ -97,14 +88,13 @@ if st.button("🔥 Run Apex Analysis"):
                     "Gap %": round(result['dist'], 2),
                     "Analysis": " | ".join(result['reasons'])
                 })
-        except:
+        except Exception as e:
             continue
 
     if master_data:
         df_display = pd.DataFrame(master_data).sort_values(by="Score", ascending=False)
         st.subheader("🏆 Conviction Rankings")
         
-        # FIXED: Using st.dataframe with column configuration for better styling in new Streamlit
         st.dataframe(
             df_display,
             column_config={
@@ -120,4 +110,4 @@ if st.button("🔥 Run Apex Analysis"):
             use_container_width=True
         )
     else:
-        st.error("No valid data found.")
+        st.error("No valid data found. Check your internet or ticker names.")
